@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Location</title>
+</head>
+<body>
+  <h2>📍 Live Location Sharing</h2>
+
+  <p>Location share karne ke liye neeche button dabayein.</p>
+
+  <button onclick="getLocation()">Share My Location</button>
+
+  <p id="status"></p>
+
+  <script>
+    function getLocation() {
+      const status = document.getElementById("status");
+
+      if (!navigator.geolocation) {
+        status.innerText = "Location is not supported.";
+        return;
+      }
+
+      status.innerText = "Location permission maangi ja rahi hai...";
+
+      navigator.geolocation.getCurrentPosition(
+        function(position) {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          const mapLink =
+            "https://www.google.com/maps?q=" + lat + "," + lon;
+
+          status.innerHTML =
+            "Location mil gayi ✅<br><br>" +
+            "<a href='" + mapLink + "' target='_blank'>" +
+            "Open Location on Google Maps" +
+            "</a>";
+        },
+        function() {
+          status.innerText =
+            "Location permission allow nahi hui.";
+        }
+      );
+    }
+  </script>
+</body>
+</html>
