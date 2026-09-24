@@ -1,9 +1,66 @@
-const express=require('express'); const http=require('http'); const {Server}=require('socket.io'); const path=require('path');
-const app=express(), server=http.createServer(app), io=new Server(server), PORT=process.env.PORT||10000; const rooms=new Map();
-app.use(express.static(path.join(__dirname,'public'))); app.get('*',(q,s)=>s.sendFile(path.join(__dirname,'public','index.html')));
-io.on('connection',socket=>{
- socket.on('join-room',({room,role})=>{if(!room||!['sharer','viewer'].includes(role))return; socket.join(room); socket.data.room=room; socket.data.role=role; if(role==='viewer'&&rooms.has(room)) socket.emit('location-update',rooms.get(room));});
- socket.on('location-update',d=>{const room=socket.data.room;if(socket.data.role!=='sharer'||!room)return;const lat=Number(d?.lat),lon=Number(d?.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return;const p={lat,lon,accuracy:Number.isFinite(Number(d.accuracy))?Number(d.accuracy):null,time:Date.now()};rooms.set(room,p);socket.to(room).emit('location-update',p);});
- socket.on('stop-sharing',()=>{const r=socket.data.room;if(socket.data.role==='sharer'&&r){rooms.delete(r);socket.to(r).emit('sharing-stopped');}});
- socket.on('disconnect',()=>{const r=socket.data.room;if(socket.data.role==='sharer'&&r){rooms.delete(r);socket.to(r).emit('sharing-stopped');}});
-}); server.listen(PORT,()=>console.log('Listening on '+PORT));
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+const PORT = process.env.PORT || 10000;
+
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+const rooms = new Map();
+
+io.on("connection", (socket) => {
+  socket.on("join-room", ({ room, role }) => {
+    if (!room) return;
+
+    socket.join(room);
+    socket.data.room = room;
+    socket.data.role = role;
+
+    if (!rooms.has(room)) {
+      rooms.set(room, { location: null });
+    }
+
+    const saved = rooms.get(room);
+
+    if (role === "viewer" && saved.location) {
+      socket.emit("location-update", saved.location);
+    }
+  });
+
+  socket.on("location-update", (data) => {
+    const room = socket.data.room;
+    if (!room) return;
+
+    if (!rooms.has(room)) {
+      rooms.set(room, { location: null });
+    }
+
+    rooms.get(room).location = data;
+
+    socket.to(room).emit("location-update", data);
+  });
+
+  socket.on("stop-sharing", () => {
+    const room = socket.data.room;
+    if (room) {
+      socket.to(room).emit("stop-sharing");
+    }
+  });
+
+  socket.on("disconnect", () => {
+    socket.leave(socket.data.room);
+  });
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
