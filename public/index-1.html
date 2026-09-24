@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Location</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f1f5ff;padding:28px 16px;color:#111}
+.card{max-width:620px;margin:auto;background:#fff;border-radius:28px;padding:28px 18px 34px;box-shadow:0 10px 35px #0002;text-align:center}
+h1{font-size:42px;margin:10px 0 28px}
+.note{font-size:22px;line-height:1.35;margin-bottom:28px}
+input{width:90%;padding:20px;border:1px solid #ccc;border-radius:18px;font-size:24px}
+button{width:90%;padding:18px;margin-top:18px;border:0;border-radius:16px;background:#087fd1;color:white;font-size:24px}
+button.stop{background:#ef1025}
+button.share{background:#168a35}
+#status{font-size:20px;font-weight:bold;margin:30px 0 18px}
+#location{display:none;background:#edf5ff;border-radius:20px;padding:20px;font-size:21px}
+a{font-size:22px;color:#075dcc}
+.small{font-size:15px;color:#555;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📍 Live Location</h1>
+  <div class="note">Location sirf tab share hogi jab sharer khud permission dekar sharing start kare.</div>
+
+  <input id="room" placeholder="Room code (jaise 123456)" value="123456">
+
+  <button onclick="startSharing()">📍 Start Sharing</button>
+  <button onclick="viewLocation()">🗺️ View Location</button>
+  <button class="stop" onclick="stopSharing()">⛔ Stop Sharing</button>
+  <button class="share" onclick="shareRoom()">📤 Share Room Link</button>
+
+  <div id="status">⚪ Sharing start nahi hui.</div>
+
+  <div id="location">
+    <h2>📍 Location received</h2>
+    <div id="coords"></div>
+    <br>
+    <a id="mapLink" target="_blank">🗺️ Open location on map</a>
+  </div>
+
+  <div class="small">Sharer aur viewer ko same room code use karna hai.</div>
+</div>
+
+<script>
+const socket = io();
+let currentRoom = "";
+let watchId = null;
+
+function getRoom(){
+  return document.getElementById("room").value.trim();
+}
+
+function startSharing(){
+  const room = getRoom();
+  if(!room) return alert("Pehle room code dalo.");
+  if(!navigator.geolocation) return alert("Is browser me location supported nahi hai.");
+
+  currentRoom = room;
+  socket.emit("join-room",{room,role:"sharer"});
+  document.getElementById("status").innerText="🟢 Location live share ho rahi hai.";
+
+  if(watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    const data={
+      latitude:pos.coords.latitude,
+      longitude:pos.coords.longitude,
+      accuracy:pos.coords.accuracy,
+      time:Date.now()
+    };
+    socket.emit("location-update",data);
+  },err=>{
+    document.getElementById("status").innerText="❌ Location permission/error: "+err.message;
+  },{
+    enableHighAccuracy:true,
+    maximumAge:5000,
+    timeout:15000
+  });
+}
+
+function viewLocation(){
+  const room=getRoom();
+  if(!room) return alert("Pehle room code dalo.");
+  currentRoom=room;
+  socket.emit("join-room",{room,role:"viewer"});
+  document.getElementById("status").innerText="🗺️ Location ka wait kar rahe hain...";
+}
+
+socket.on("location-update",data=>{
+  document.getElementById("location").style.display="block";
+  document.getElementById("coords").innerText=
+    "Latitude: "+data.latitude+"\nLongitude: "+data.longitude+
+    "\nAccuracy: "+Math.round(data.accuracy)+" meters";
+  document.getElementById("mapLink").href=
+    "https://www.google.com/maps?q="+data.latitude+","+data.longitude;
+  document.getElementById("status").innerText="🟢 Live location received.";
+});
+
+socket.on("stop-sharing",()=>{
+  document.getElementById("status").innerText="⛔ Sharer ne location sharing rok di.";
+});
+
+function stopSharing(){
+  if(watchId !== null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId=null;
+  }
+  if(currentRoom) socket.emit("stop-sharing");
+  document.getElementById("status").innerText="⛔ Location sharing stopped.";
+}
+
+async function shareRoom(){
+  const room=getRoom();
+  if(!room) return alert("Pehle room code dalo.");
+
+  const url=location.origin+"?room="+encodeURIComponent(room);
+  const text="📍 Live Location dekhne ke liye ye link kholo:\n"+url+
+             "\nRoom code: "+room;
+
+  if(navigator.share){
+    try{
+      await navigator.share({title:"Live Location",text,url});
+      return;
+    }catch(e){}
+  }
+
+  const wa="https://wa.me/?text="+encodeURIComponent(text);
+  window.open(wa,"_blank");
+}
+
+const params=new URLSearchParams(location.search);
+if(params.get("room")) document.getElementById("room").value=params.get("room");
+</script>
+</body>
+</html>
